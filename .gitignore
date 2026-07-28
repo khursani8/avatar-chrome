@@ -30,3 +30,4 @@ public/tts/models/
 
 # Old piper directory (superseded by public/tts/)
 public/piper/
+public/tts/piper-phonemize.wasm
