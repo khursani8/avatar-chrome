@@ -1,0 +1,242 @@
+/**
+ * TTS Provider — browser-only Piper inference for Revolab/vits models.
+ *
+ * Pipeline (all client-side, no server):
+ *   text → phonemizer WASM (espeak-ng ms voice) → phoneme IDs → ONNX Runtime Web → audio
+ *
+ * Speaker models live in public/tts/models/<speaker>/model.onnx[.json].
+ * A speakers.json manifest lists available speakers.
+ *
+ * Run `node scripts/prepare-tts.mjs` after installing deps and adding models.
+ */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+import { initializePhonemizer, phonemizeToCodePoints } from "./phonemizer";
+
+const BASE = import.meta.env.BASE_URL;
+const PHONEMIZER_VOICE = "ms"; // Malay espeak-ng voice
+
+// ort is loaded from public/tts/dist/ort.min.js via <script> tag in main.tsx
+declare const ort: any;
+
+export interface SpeakerInfo {
+  id: string;
+  name: string;
+  dir: string;
+}
+
+interface LoadedSpeaker {
+  session: any;
+  config: any;
+}
+
+let ready = false;
+let initPromise: Promise<void> | null = null;
+let speakers: SpeakerInfo[] = [];
+const loadedSessions = new Map<string, LoadedSpeaker>();
+
+export function isReady(): boolean {
+  return ready;
+}
+
+export function getSpeakers(): SpeakerInfo[] {
+  return speakers;
+}
+
+export async function initialize(
+  onProgress?: (msg: string | null) => void,
+  preferredSpeaker?: string
+): Promise<void> {
+  if (ready) return;
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
+    try {
+      // 1. Load phonemizer WASM
+      console.log("[TTS] Step 1: Initializing phonemizer...");
+      await initializePhonemizer(onProgress);
+      console.log("[TTS] Step 1 done: phonemizer ready");
+
+      // 2. Verify ONNX Runtime is available
+      console.log("[TTS] Step 2: Checking ONNX Runtime...");
+      if (typeof ort === "undefined") {
+        throw new Error(
+          "ONNX Runtime not loaded. Ensure public/tts/dist/ort.min.js exists."
+        );
+      }
+      ort.env.wasm.wasmPaths = `${BASE}tts/dist/`;
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.simd = true;
+      console.log("[TTS] Step 2 done: ORT available");
+
+      // 3. Discover available speakers
+      console.log("[TTS] Step 3: Loading speakers...");
+      onProgress?.("Loading speaker list...");
+      const manifestResp = await fetch(`${BASE}tts/models/speakers.json`);
+      if (!manifestResp.ok) {
+        throw new Error(
+          "Speaker manifest not found. Add models to public/tts/models/ and run: node scripts/prepare-tts.mjs"
+        );
+      }
+      const manifest = await manifestResp.json();
+      speakers = manifest.speakers ?? [];
+
+      if (speakers.length === 0) {
+        throw new Error("No speakers found in manifest.");
+      }
+
+      // 4. Pre-load only the selected speaker (lazy-load others on switch)
+      const targetId = preferredSpeaker && speakers.find((s) => s.id === preferredSpeaker)
+        ? preferredSpeaker
+        : speakers[0].id;
+      console.log(`[TTS] Step 4: Loading speaker "${targetId}"...`);
+      onProgress?.(`Loading ${targetId}...`);
+      await ensureSpeakerLoaded(targetId);
+      console.log(`[TTS] Step 4 done: ${targetId} loaded`);
+
+      ready = true;
+      onProgress?.(null);
+      console.log(
+        `[TTS] ready, speakers: ${speakers.map((s) => s.id).join(", ")}`
+      );
+    } catch (err) {
+      initPromise = null;
+      throw err;
+    }
+  })();
+
+  return initPromise;
+}
+
+/** Load a speaker's ONNX model + config if not already cached. */
+async function ensureSpeakerLoaded(speakerId: string): Promise<LoadedSpeaker> {
+  const cached = loadedSessions.get(speakerId);
+  if (cached) return cached;
+
+  const speaker = speakers.find((s) => s.id === speakerId);
+  if (!speaker) throw new Error(`Unknown speaker: ${speakerId}`);
+
+  const modelUrl = `${BASE}tts/models/${speaker.dir}/model.onnx`;
+  const configUrl = `${BASE}tts/models/${speaker.dir}/model.onnx.json`;
+  console.log(`[TTS] Loading speaker ${speakerId} from ${modelUrl}`);
+
+  const configResp = await fetch(configUrl);
+  if (!configResp.ok) {
+    throw new Error(`Config not found: ${speaker.dir}/model.onnx.json`);
+  }
+  const config = await configResp.json();
+  console.log(`[TTS] Config:`, { sample_rate: config.audio?.sample_rate, voice: config.espeak?.voice, num_symbols: config.num_symbols });
+
+  console.log(`[TTS] Creating ONNX session (61MB model, this takes a moment)...`);
+  const session = await ort.InferenceSession.create(modelUrl, {
+    executionProviders: ["wasm"],
+    graphOptimizationLevel: "all",
+  });
+  console.log(`[TTS] ONNX session created, inputs:`, session.inputNames, "outputs:", session.outputNames);
+
+  const loaded: LoadedSpeaker = { session, config };
+  loadedSessions.set(speakerId, loaded);
+  console.log(`[TTS] loaded speaker: ${speakerId}`);
+  return loaded;
+}
+
+export async function synthesize(
+  text: string,
+  options?: { speaker?: string; lengthScale?: number }
+): Promise<{ audio: Float32Array; sampleRate: number }> {
+  if (!ready) throw new Error("TTS not initialized");
+
+  const speakerId = options?.speaker ?? speakers[0]?.id;
+  if (!speakerId) throw new Error("No speaker selected");
+
+  const { session, config } = await ensureSpeakerLoaded(speakerId);
+
+  // Phonemize: text → IPA characters → phoneme IDs via phoneme_id_map
+  console.log(`[TTS] Phonemizing: "${text.slice(0, 50)}..."`);
+  const sentences = phonemizeToCodePoints(text, config.espeak?.voice ?? PHONEMIZER_VOICE);
+  if (!sentences || sentences.length === 0) {
+    return { audio: new Float32Array(0), sampleRate: config.audio?.sample_rate ?? 22050 };
+  }
+
+  // Convert code points to characters and map to IDs
+  // Matches revospeech's _phonemes_to_ids: BOS, phoneme, PAD, phoneme, PAD, ..., EOS
+  const phonemeIdMap: Record<string, number[]> = config.phoneme_id_map ?? {};
+  const bosIds = phonemeIdMap["^"] ?? [1];
+  const eosIds = phonemeIdMap["$"] ?? [2];
+  const padIds = phonemeIdMap["_"] ?? [0];
+
+  const ids: number[] = [...bosIds];
+  for (const sentence of sentences) {
+    for (const cp of sentence) {
+      const char = String.fromCodePoint(cp);
+      const mapped = phonemeIdMap[char];
+      if (mapped && mapped.length > 0) {
+        ids.push(...mapped);
+        ids.push(...padIds);
+      }
+    }
+  }
+  ids.push(...eosIds);
+  console.log(`[TTS] Phonemes: ${ids.length} IDs from ${sentences.flat().length} code points`);
+
+  // Build ONNX input tensors (standard piper VITS format)
+  const inference = config.inference ?? {};
+  const inputTensor = new ort.Tensor(
+    "int64",
+    new BigInt64Array(ids.map((id) => BigInt(id))),
+    [1, ids.length]
+  );
+  const lengthTensor = new ort.Tensor(
+    "int64",
+    new BigInt64Array([BigInt(ids.length)]),
+    [1]
+  );
+  const scalesTensor = new ort.Tensor(
+    "float32",
+    new Float32Array([
+      inference.noise_scale ?? 0.667,
+      options?.lengthScale ?? inference.length_scale ?? 1.0,
+      inference.noise_w ?? 0.8,
+    ]),
+    [3]
+  );
+
+  const feeds: Record<string, any> = {
+    input: inputTensor,
+    input_lengths: lengthTensor,
+    scales: scalesTensor,
+  };
+
+  if (inference.speaker_id !== undefined) {
+    feeds.sid = new ort.Tensor(
+      "int64",
+      new BigInt64Array([BigInt(inference.speaker_id)]),
+      [1]
+    );
+  }
+
+  console.log(`[TTS] Running ONNX inference with ${ids.length} phoneme IDs...`);
+  const results = await session.run(feeds);
+  console.log(`[TTS] Inference done, audio length:`, results.output?.data?.length ?? "unknown");
+  const audioTensor = results.output ?? results[Object.keys(results)[0]];
+
+  return {
+    audio: new Float32Array(audioTensor.data),
+    sampleRate: config.audio?.sample_rate ?? 22050,
+  };
+}
+
+export async function dispose(): Promise<void> {
+  for (const [, loaded] of loadedSessions) {
+    try {
+      await loaded.session.release();
+    } catch {
+      // ignore
+    }
+  }
+  loadedSessions.clear();
+  ready = false;
+  initPromise = null;
+  speakers = [];
+}
