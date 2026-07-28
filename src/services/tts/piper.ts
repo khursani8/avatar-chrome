@@ -13,6 +13,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { initializePhonemizer, phonemizeToCodePoints } from "./phonemizer";
+import { normalizeMalay } from "./normalizer";
 
 const BASE = import.meta.env.BASE_URL;
 const PHONEMIZER_VOICE = "ms"; // Malay espeak-ng voice
@@ -152,9 +153,10 @@ export async function synthesize(
 
   const { session, config } = await ensureSpeakerLoaded(speakerId);
 
-  // Phonemize: text → IPA characters → phoneme IDs via phoneme_id_map
-  console.log(`[TTS] Phonemizing: "${text.slice(0, 50)}..."`);
-  const sentences = phonemizeToCodePoints(text, config.espeak?.voice ?? PHONEMIZER_VOICE);
+  // Normalize text (numbers → Malay words) before phonemization
+  const normalized = normalizeMalay(text);
+  console.log(`[TTS] Phonemizing: "${normalized.slice(0, 50)}..."`);
+  const sentences = phonemizeToCodePoints(normalized, config.espeak?.voice ?? PHONEMIZER_VOICE);
   if (!sentences || sentences.length === 0) {
     return { audio: new Float32Array(0), sampleRate: config.audio?.sample_rate ?? 22050 };
   }
