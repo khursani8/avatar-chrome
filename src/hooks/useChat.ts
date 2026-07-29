@@ -241,10 +241,16 @@ export function useChat(settings: AppSettings) {
     async (text: string) => {
       if (isSending || !text.trim()) return;
 
-      // Track user activity for silence detection
-      lastActivityRef.current = Date.now();
-      silenceCountRef.current = 0;
-      setUserAfk(false);
+      // Track user activity for silence detection.
+      // FIX: Don't reset silence state for auto-generated silence prompts —
+      // otherwise the counter resets to 0 on every silence trigger and never
+      // reaches the hard limit of 2, causing infinite silence loops.
+      const isAutoSilence = text.trim().startsWith('<silence:');
+      if (!isAutoSilence) {
+        lastActivityRef.current = Date.now();
+        silenceCountRef.current = 0;
+        setUserAfk(false);
+      }
 
       setIsSending(true);
 
