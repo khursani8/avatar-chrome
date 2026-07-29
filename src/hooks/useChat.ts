@@ -51,13 +51,15 @@ export function useChat(settings: AppSettings) {
   const appliedSystemPromptRef = useRef(settings.llmSystemPrompt);
   const sessionInitCountRef = useRef(0);
   const messagesRef = useRef(messages);
+  const lastActivityRef = useRef(0);
+  const silenceTriggeredRef = useRef(false);
+  const isSendingRef = useRef(false);
+  const isSpeakingRef = useRef(false);
 
-  // Keep messagesRef in sync via effect (not during render) to satisfy
-  // react-hooks/refs rule. One-render staleness is fine — all consumers
-  // are user-triggered callbacks, not render-path.
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
+  // Keep refs in sync
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { isSendingRef.current = isSending; }, [isSending]);
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
 
   const beginSessionInit = useCallback(() => {
     sessionInitCountRef.current += 1;
@@ -236,6 +238,11 @@ export function useChat(settings: AppSettings) {
   const send = useCallback(
     async (text: string) => {
       if (isSending || !text.trim()) return;
+
+      // Track user activity for silence detection
+      lastActivityRef.current = Date.now();
+      silenceTriggeredRef.current = false;
+
       setIsSending(true);
 
       tts.stop();
@@ -347,6 +354,32 @@ export function useChat(settings: AppSettings) {
       settings,
     ]
   );
+
+  // Keep send ref current for silence detector (avoids effect re-run)
+  const sendRef = useRef(send);
+  useEffect(() => { sendRef.current = send; }, [send]);
+
+  // Silence detection: after 30s of no user activity, auto-send
+  // "<silence:30s>" so the AI proactively checks in on the user.
+  useEffect(() => {
+    if (llmStatus !== "available") return;
+    if (lastActivityRef.current === 0) lastActivityRef.current = Date.now();
+
+    const id = window.setInterval(() => {
+      // Skip if AI is busy or already triggered
+      if (isSendingRef.current || isSpeakingRef.current) return;
+      if (silenceTriggeredRef.current) return;
+      // Only trigger after the user has chatted at least once
+      if (messagesRef.current.length === 0) return;
+
+      if (Date.now() - lastActivityRef.current >= 30_000) {
+        silenceTriggeredRef.current = true;
+        void sendRef.current("<silence:30s>");
+      }
+    }, 5_000);
+
+    return () => window.clearInterval(id);
+  }, [llmStatus]);
 
   const reset = useCallback(async () => {
     tts.stop();
