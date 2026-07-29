@@ -1,0 +1,14 @@
+{
+  "speakers": [
+    {
+      "id": "paan",
+      "name": "paan",
+      "dir": "paan"
+    },
+    {
+      "id": "sarah",
+      "name": "sarah",
+      "dir": "sarah"
+    }
+  ]
+}
