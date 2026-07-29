@@ -97,6 +97,44 @@
   cursor: not-allowed;
 }
 
+/* ── Mic (voice input) ── */
+.micBtn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.micBtn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--primary);
+}
+
+.micBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.micListening {
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #fff;
+  animation: micPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(229, 72, 77, 0); }
+}
+
 .prepareBtn {
   height: 44px;
   padding: 0 18px;
