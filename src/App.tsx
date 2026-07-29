@@ -43,6 +43,7 @@ function AppContent({
     workingTopic,
     workingEmotion,
     memories,
+    speakerLoading,
     initializeAI,
     send,
     reset,
@@ -329,6 +330,7 @@ function AppContent({
                 workingTopic={workingTopic}
                 workingEmotion={workingEmotion}
                 memories={memories}
+                speakerLoading={speakerLoading}
               />
             </aside>
 

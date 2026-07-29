@@ -18,6 +18,17 @@ export function getSpeakers() {
   return tts.getSpeakers();
 }
 
+export function isSpeakerLoaded(speakerId: string): boolean {
+  return tts.isSpeakerLoaded(speakerId);
+}
+
+export async function preloadSpeaker(
+  speakerId: string,
+  onStatus?: (msg: string | null) => void
+): Promise<void> {
+  return tts.preloadSpeaker(speakerId, onStatus);
+}
+
 export async function initialize(
   onProgress?: (msg: string | null) => void,
   preferredSpeaker?: string
@@ -35,13 +46,20 @@ export async function synthesize(
 export async function speak(
   text: string,
   onMouthChange: (level: number) => void,
-  options?: { speaker?: string; lengthScale?: number }
+  options?: { speaker?: string; lengthScale?: number },
+  onStatus?: (msg: string | null) => void
 ): Promise<void> {
   stop();
   onMouthChange(0);
 
   if (!isReady()) {
     await initialize((msg) => msg && console.log("TTS:", msg));
+  }
+
+  // Ensure the speaker model is loaded BEFORE synthesis so the load is visible
+  // (via onStatus) instead of a silent gap inside synthesize().
+  if (options?.speaker) {
+    await preloadSpeaker(options.speaker, onStatus);
   }
 
   const { audio, sampleRate } = await synthesize(text, options);

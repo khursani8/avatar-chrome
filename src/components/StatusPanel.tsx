@@ -14,6 +14,7 @@ interface Props {
   workingTopic: string;
   workingEmotion: AvatarEmotion;
   memories: MemoryFact[];
+  speakerLoading: boolean;
 }
 
 // Leading filler words (Malay + English) stripped so the topic reflects the
@@ -64,6 +65,7 @@ export function StatusPanel({
   workingTopic,
   workingEmotion,
   memories,
+  speakerLoading,
 }: Props) {
   const voicePct = Math.round(mouthLevel * 100);
   const [uptime, setUptime] = useState(0);
@@ -105,15 +107,20 @@ export function StatusPanel({
       <div className={styles.row}>
         <span className={styles.label}>State</span>
         <div className={styles.stateWrap}>
-          {isSending && (
+          {speakerLoading && (
+            <span className={`${styles.stateTag} ${styles.thinking}`}>
+              <span className={styles.spinner} /> Loading voice
+            </span>
+          )}
+          {!speakerLoading && isSending && (
             <span className={`${styles.stateTag} ${styles.thinking}`}>
               <span className={styles.spinner} /> Thinking
             </span>
           )}
-          {!isSending && isSpeaking && (
+          {!speakerLoading && !isSending && isSpeaking && (
             <span className={`${styles.stateTag} ${styles.speaking}`}>● Speaking</span>
           )}
-          {!isSending && !isSpeaking && (
+          {!speakerLoading && !isSending && !isSpeaking && (
             <span className={`${styles.stateTag} ${styles.idle}`}>● Idle</span>
           )}
         </div>

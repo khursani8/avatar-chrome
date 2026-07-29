@@ -48,6 +48,8 @@ let ready = false;
 let initPromise: Promise<void> | null = null;
 let speakers: SpeakerInfo[] = [];
 const loadedSessions = new Map<string, LoadedSpeaker>();
+// In-flight speaker loads — dedup so preload + speak never double-load.
+const loadingPromises = new Map<string, Promise<LoadedSpeaker>>();
 
 export function isReady(): boolean {
   return ready;
@@ -122,11 +124,47 @@ export async function initialize(
   return initPromise;
 }
 
-/** Load a speaker's ONNX model + config if not already cached. */
-async function ensureSpeakerLoaded(speakerId: string): Promise<LoadedSpeaker> {
+/** Whether a speaker's model is already loaded and ready to speak. */
+export function isSpeakerLoaded(speakerId: string): boolean {
+  return loadedSessions.has(speakerId);
+}
+
+/**
+ * Start loading a speaker's model so it's ready before the user speaks.
+ * Safe to call repeatedly — concurrent calls share one load (dedup'd) and
+ * already-loaded speakers resolve immediately. `onStatus` reports progress.
+ */
+export async function preloadSpeaker(
+  speakerId: string,
+  onStatus?: (msg: string | null) => void
+): Promise<void> {
+  if (!ready) return;
+  await ensureSpeakerLoaded(speakerId, onStatus);
+}
+
+/** Load a speaker's ONNX model + config if not already cached (dedup'd). */
+async function ensureSpeakerLoaded(
+  speakerId: string,
+  onStatus?: (msg: string | null) => void
+): Promise<LoadedSpeaker> {
   const cached = loadedSessions.get(speakerId);
   if (cached) return cached;
+  const inFlight = loadingPromises.get(speakerId);
+  if (inFlight) return inFlight;
 
+  const promise = loadSpeakerSession(speakerId, onStatus);
+  loadingPromises.set(speakerId, promise);
+  try {
+    return await promise;
+  } finally {
+    loadingPromises.delete(speakerId);
+  }
+}
+
+async function loadSpeakerSession(
+  speakerId: string,
+  onStatus?: (msg: string | null) => void
+): Promise<LoadedSpeaker> {
   const speaker = speakers.find((s) => s.id === speakerId);
   if (!speaker) throw new Error(`Unknown speaker: ${speakerId}`);
 
@@ -136,6 +174,7 @@ async function ensureSpeakerLoaded(speakerId: string): Promise<LoadedSpeaker> {
   const modelUrl = `${MODEL_BASE}${speaker.dir}/model.onnx`;
   const configUrl = `${BASE}tts/models/${speaker.dir}/model.onnx.json`;
   console.log(`[TTS] Loading speaker ${speakerId} from ${modelUrl}`);
+  onStatus?.(`Loading ${speaker.name || speaker.id} voice…`);
 
   const configResp = await fetch(configUrl);
   if (!configResp.ok) {
@@ -154,6 +193,7 @@ async function ensureSpeakerLoaded(speakerId: string): Promise<LoadedSpeaker> {
   const loaded: LoadedSpeaker = { session, config };
   loadedSessions.set(speakerId, loaded);
   console.log(`[TTS] loaded speaker: ${speakerId}`);
+  onStatus?.(null);
   return loaded;
 }
 

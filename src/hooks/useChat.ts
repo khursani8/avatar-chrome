@@ -54,6 +54,7 @@ export function useChat(settings: AppSettings) {
   const [workingTopic, setWorkingTopic] = useState("");
   const [workingEmotion, setWorkingEmotion] = useState<AvatarEmotion>("neutral");
   const [memories, setMemories] = useState<MemoryFact[]>(() => memory.loadMemories());
+  const [speakerLoading, setSpeakerLoading] = useState(false);
 
   const appliedSystemPromptRef = useRef(settings.llmSystemPrompt);
   const sessionInitCountRef = useRef(0);
@@ -363,10 +364,15 @@ export function useChat(settings: AppSettings) {
           }
           setIsSpeaking(true);
           void tts
-            .speak(reply, setMouthLevel, {
-              speaker: SPEAKER_FOR_AVATAR[settings.selectedAvatarId] ?? settings.ttsSpeaker ?? undefined,
-              lengthScale: toTtsLengthScale(settings.ttsLengthScale),
-            })
+            .speak(
+              reply,
+              setMouthLevel,
+              {
+                speaker: SPEAKER_FOR_AVATAR[settings.selectedAvatarId] ?? settings.ttsSpeaker ?? undefined,
+                lengthScale: toTtsLengthScale(settings.ttsLengthScale),
+              },
+              (msg) => setStatusText(msg ?? "")
+            )
             .catch((e) => {
               setErrorMessage(
                 e instanceof Error ? e.message : "TTS playback failed."
@@ -399,6 +405,41 @@ export function useChat(settings: AppSettings) {
   // Keep send ref current for silence detector (avoids effect re-run)
   const sendRef = useRef(send);
   useEffect(() => { sendRef.current = send; }, [send]);
+
+  // Prefetch the selected speaker's model on switch so the user doesn't hit a
+  // silent 61MB download mid-conversation. Progress surfaces via statusText +
+  // speakerLoading (shown in StatusPanel as a "Loading voice" state).
+  useEffect(() => {
+    if (!ttsReady || llmStatus !== "available") return;
+    const speakerId =
+      SPEAKER_FOR_AVATAR[settings.selectedAvatarId] ?? settings.ttsSpeaker;
+    if (!speakerId) return;
+    let cancelled = false;
+    void (async () => {
+      // preloadSpeaker resolves instantly for already-loaded speakers. The
+      // setState calls live inside this async callback so they don't run
+      // synchronously in the effect body (react-hooks/set-state-in-effect).
+      if (!tts.isSpeakerLoaded(speakerId)) setSpeakerLoading(true);
+      try {
+        await tts.preloadSpeaker(speakerId, (msg) => {
+          if (!cancelled) setStatusText(msg ?? "");
+        });
+        if (!cancelled) {
+          setSpeakerLoading(false);
+          setStatusText("");
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setSpeakerLoading(false);
+          setStatusText("");
+          console.warn("[TTS] speaker preload failed:", e);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.selectedAvatarId, settings.ttsSpeaker, ttsReady, llmStatus]);
 
   // Silence detection: after 30s of no user activity, auto-send
   // "<silence:30s>" so the AI proactively checks in on the user.
@@ -491,6 +532,7 @@ export function useChat(settings: AppSettings) {
     ttsReady,
     ttsStatus,
     userAfk,
+    speakerLoading,
     workingTopic,
     workingEmotion,
     memories,
