@@ -9,10 +9,12 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { AppSettings, ChatMessage } from "../types";
+import type { AppSettings, AvatarEmotion, ChatMessage } from "../types";
 import { SPEAKER_FOR_AVATAR } from "../types";
 import * as llm from "../services/llm";
 import * as tts from "../services/tts";
+import * as memory from "../services/memory";
+import type { MemoryFact } from "../services/memory";
 import { loadMessages, saveMessages } from "../services/storage";
 import { sanitizeOutput } from "../services/sanitize";
 
@@ -49,6 +51,9 @@ export function useChat(settings: AppSettings) {
   const [ttsReady, setTtsReady] = useState(false);
   const [ttsStatus, setTtsStatus] = useState("");
   const [userAfk, setUserAfk] = useState(false);
+  const [workingTopic, setWorkingTopic] = useState("");
+  const [workingEmotion, setWorkingEmotion] = useState<AvatarEmotion>("neutral");
+  const [memories, setMemories] = useState<MemoryFact[]>(() => memory.loadMemories());
 
   const appliedSystemPromptRef = useRef(settings.llmSystemPrompt);
   const sessionInitCountRef = useRef(0);
@@ -57,11 +62,15 @@ export function useChat(settings: AppSettings) {
   const silenceCountRef = useRef(0);
   const isSendingRef = useRef(false);
   const isSpeakingRef = useRef(false);
+  const memoriesRef = useRef(memories);
+  const workingTopicRef = useRef(workingTopic);
 
   // Keep refs in sync
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { isSendingRef.current = isSending; }, [isSending]);
   useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+  useEffect(() => { memoriesRef.current = memories; }, [memories]);
+  useEffect(() => { workingTopicRef.current = workingTopic; }, [workingTopic]);
 
   const beginSessionInit = useCallback(() => {
     sessionInitCountRef.current += 1;
@@ -302,7 +311,30 @@ export function useChat(settings: AppSettings) {
       saveMessages(updatedWithUser);
 
       try {
-        const reply = sanitizeOutput(await llm.prompt(text.trim()));
+        // Build invisible context note (long-term memory + current topic) so
+        // the avatar has background knowledge. Not shown in the UI or stored.
+        const contextNote = memory.buildMemoryContext(memoriesRef.current, {
+          topic: workingTopicRef.current || undefined,
+        });
+        const state = await llm.promptForState(text.trim(), contextNote);
+        const reply = sanitizeOutput(state.reply);
+
+        // Layer 2 — working memory (ephemeral): track current subject + mood.
+        if (state.topic) setWorkingTopic(state.topic);
+        if (state.emotion) setWorkingEmotion(state.emotion);
+
+        // Layer 3 — long-term memory (persistent): dedup happens in addMemory.
+        if (state.remember && state.remember.length > 0) {
+          let changed = false;
+          for (const fact of state.remember) {
+            if (memory.addMemory(fact)) changed = true;
+          }
+          if (changed) {
+            const updated = memory.loadMemories();
+            memoriesRef.current = updated;
+            setMemories(updated);
+          }
+        }
         const assistantMsg: ChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
@@ -400,6 +432,9 @@ export function useChat(settings: AppSettings) {
     llm.destroySession();
     setMessages([]);
     saveMessages([]);
+    // Clear working memory (per-session) — long-term memory persists.
+    setWorkingTopic("");
+    setWorkingEmotion("neutral");
     setNeedsInitialization(false);
     beginSessionInit();
     setStatusText("Creating AI session...");
@@ -434,6 +469,11 @@ export function useChat(settings: AppSettings) {
     }
   }, [beginSessionInit, endSessionInit, settings.llmSystemPrompt]);
 
+  // Re-run availability check after the user claims to have enabled the flags.
+  const recheckAI = useCallback(() => {
+    void initLLM(messagesRef.current);
+  }, [initLLM]);
+
   const clearError = useCallback(() => setErrorMessage(""), []);
 
   return {
@@ -442,7 +482,7 @@ export function useChat(settings: AppSettings) {
     llmStatus,
     statusText,
     mouthLevel,
-    mouthOpen: mouthLevel > 0.18,
+    mouthOpen: mouthLevel > 0.9,
     isSpeaking,
     errorMessage,
     canInitializeAI: needsInitialization || isInitializingAI,
@@ -451,9 +491,13 @@ export function useChat(settings: AppSettings) {
     ttsReady,
     ttsStatus,
     userAfk,
+    workingTopic,
+    workingEmotion,
+    memories,
     initializeAI,
     send,
     reset,
+    recheckAI,
     clearError,
   };
 }

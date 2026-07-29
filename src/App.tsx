@@ -4,6 +4,7 @@ import { ChatLog } from "./components/ChatLog";
 import { BottomBar } from "./components/BottomBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { StatusPanel } from "./components/StatusPanel";
+import { SetupBanner } from "./components/SetupBanner";
 import { Toast } from "./components/Toast";
 import { BootOverlay } from "./components/BootOverlay";
 import { useChat } from "./hooks/useChat";
@@ -39,9 +40,13 @@ function AppContent({
     ttsReady,
     ttsStatus,
     userAfk,
+    workingTopic,
+    workingEmotion,
+    memories,
     initializeAI,
     send,
     reset,
+    recheckAI,
     clearError,
   } = useChat(settings);
 
@@ -270,6 +275,13 @@ function AppContent({
         </div>
       )}
 
+      {/* ── Broadcast: AI unavailable guidance ── */}
+      {isBroadcast && llmStatus === "unavailable" && (
+        <div className="ai-prepare-overlay">
+          <SetupBanner onRecheck={recheckAI} />
+        </div>
+      )}
+
       {/* ── Chat mode: full layout ── */}
       {!isBroadcast && (
         <>
@@ -314,11 +326,15 @@ function AppContent({
                 ttsEnabled={settings.ttsEnabled}
                 messages={messages}
                 avatarName={avatar?.name ?? "AI"}
+                workingTopic={workingTopic}
+                workingEmotion={workingEmotion}
+                memories={memories}
               />
             </aside>
 
             {/* Right: conversation + input */}
             <main className="conversation-area">
+              {llmStatus === "unavailable" && <SetupBanner onRecheck={recheckAI} />}
               <ChatLog messages={messages} />
               <BottomBar
                 onSend={send}

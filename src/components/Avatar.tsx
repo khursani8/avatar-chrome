@@ -12,8 +12,11 @@ interface Props {
 /** PNGTuber renderer: swaps between 4 sprites based on mouth/eye state. */
 export function Avatar({ avatar, mouthLevel }: Props) {
   const isBlinking = useBlink();
+  // Mouth opens only on strong voiced peaks (>=90%) and closes below, so it
+  // flaps with volume/syllable changes instead of staying pinned open.
+  const MOUTH_OPEN_THRESHOLD = 0.9;
   const src = useMemo(
-    () => getSpriteUrl(avatar.images, mouthLevel > 0.18, !isBlinking),
+    () => getSpriteUrl(avatar.images, mouthLevel > MOUTH_OPEN_THRESHOLD, !isBlinking),
     [avatar.images, isBlinking, mouthLevel]
   );
 

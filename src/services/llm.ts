@@ -1,3 +1,5 @@
+import type { AvatarEmotion, AvatarState } from "../types";
+
 /**
  * LLM Service — Chrome Built-in AI (Prompt API / LanguageModel)
  *
@@ -65,17 +67,41 @@ let sessionCreationKey: string | null = null;
 let sessionCreationGeneration = -1;
 let sessionGeneration = 0;
 
+export type UnavailableReason = "api-missing" | "model-unavailable";
+
+let unavailableReason: UnavailableReason | null = null;
+
+/** Why the model is unavailable (null when available or not yet checked). */
+export function getUnavailableReason(): UnavailableReason | null {
+  return unavailableReason;
+}
+
 export function isAvailable(): boolean {
   return typeof LanguageModel !== "undefined";
 }
 
 export async function checkAvailability(): Promise<LLMStatus> {
-  if (!isAvailable()) return "unavailable";
+  if (!isAvailable()) {
+    unavailableReason = "api-missing";
+    return "unavailable";
+  }
   try {
     const status = await LanguageModel!.availability(MODEL_IO);
-    if (status === "available") return "available";
-    if (status === "downloadable" || status === "downloading")
+    // Accept both legacy ("available"/"downloadable") and current
+    // ("readily"/"after-download") availability string names.
+    if (status === "available" || status === "readily") {
+      unavailableReason = null;
+      return "available";
+    }
+    if (
+      status === "downloadable" ||
+      status === "after-download" ||
+      status === "downloading"
+    ) {
+      unavailableReason = null;
       return "downloading";
+    }
+    unavailableReason = "model-unavailable";
     return "unavailable";
   } catch {
     return "error";
@@ -165,6 +191,67 @@ export async function createSession(
 export async function prompt(text: string): Promise<string> {
   if (!session) throw new Error("LLM session not created");
   return session.prompt(text);
+}
+
+const EMOTIONS: ReadonlySet<AvatarEmotion> = new Set([
+  "neutral",
+  "gembira",
+  "sedih",
+  "teruja",
+  "marah",
+  "bingung",
+]);
+
+/**
+ * Parse model output into a validated AvatarState. Tolerant of leading/trailing
+ * prose and markdown fences — extracts the outermost JSON object. If parsing
+ * fails, falls back to treating the whole output as the spoken reply so TTS
+ * still works.
+ */
+function parseState(raw: string): AvatarState {
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      const obj = JSON.parse(match[0]) as Partial<AvatarState>;
+      if (typeof obj.reply === "string" && obj.reply.trim()) {
+        const emotionRaw = typeof obj.emotion === "string" ? obj.emotion : "";
+        const emotion: AvatarEmotion = EMOTIONS.has(emotionRaw as AvatarEmotion)
+          ? (emotionRaw as AvatarEmotion)
+          : "neutral";
+        const topic =
+          typeof obj.topic === "string" && obj.topic.trim()
+            ? obj.topic.trim()
+            : undefined;
+        const remember = Array.isArray(obj.remember)
+          ? obj.remember
+              .filter((r): r is string => typeof r === "string" && r.trim().length > 0)
+              .map((r) => r.trim())
+          : undefined;
+        return { reply: obj.reply.trim(), topic, emotion, remember };
+      }
+    } catch {
+      // Malformed JSON — fall through to raw fallback.
+    }
+  }
+  return { reply: raw };
+}
+
+/**
+ * Prompt the session and parse the JSON state reply. `contextNote` is an
+ * invisible block (long-term memory + current topic) prepended to the user
+ * turn so the avatar has background context. It is never shown in the UI.
+ */
+export async function promptForState(
+  text: string,
+  contextNote?: string
+): Promise<AvatarState> {
+  if (!session) throw new Error("LLM session not created");
+  const fullText =
+    contextNote && contextNote.trim()
+      ? `${contextNote.trim()}\n\n${text}`
+      : text;
+  const raw = await session.prompt(fullText);
+  return parseState(raw);
 }
 
 export function destroySession(): void {

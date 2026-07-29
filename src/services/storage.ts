@@ -8,7 +8,7 @@ import type {
   AvatarViewTransform,
   ChatMessage,
 } from "../types";
-import { DEFAULT_SETTINGS } from "../types";
+import { DEFAULT_SETTINGS, LEGACY_DEFAULT_SYSTEM_PROMPTS } from "../types";
 
 const PREFIX = "avatar-chrome";
 
@@ -30,7 +30,12 @@ export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(KEYS.SETTINGS);
     if (!raw) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } as AppSettings;
+    const parsed = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } as AppSettings;
+    // Migrate a stored system prompt that matches a known prior default.
+    if (LEGACY_DEFAULT_SYSTEM_PROMPTS.includes(parsed.llmSystemPrompt)) {
+      parsed.llmSystemPrompt = DEFAULT_SETTINGS.llmSystemPrompt;
+    }
+    return parsed;
   } catch {
     return { ...DEFAULT_SETTINGS };
   }

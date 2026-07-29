@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import type { ChatMessage } from "../types";
+import type { AvatarEmotion, ChatMessage } from "../types";
+import type { MemoryFact } from "../services/memory";
 import styles from "./StatusPanel.module.css";
 
 interface Props {
@@ -10,6 +11,9 @@ interface Props {
   ttsEnabled: boolean;
   messages: ChatMessage[];
   avatarName: string;
+  workingTopic: string;
+  workingEmotion: AvatarEmotion;
+  memories: MemoryFact[];
 }
 
 // Leading filler words (Malay + English) stripped so the topic reflects the
@@ -57,6 +61,9 @@ export function StatusPanel({
   ttsEnabled,
   messages,
   avatarName,
+  workingTopic,
+  workingEmotion,
+  memories,
 }: Props) {
   const voicePct = Math.round(mouthLevel * 100);
   const [uptime, setUptime] = useState(0);
@@ -67,7 +74,9 @@ export function StatusPanel({
     return () => clearInterval(id);
   }, []);
 
-  const topic = deriveTopic(messages);
+  // Prefer the LLM-derived working topic (real Layer-2 state); fall back to the
+  // message heuristic when the model hasn't emitted one yet (e.g. parse failed).
+  const topic = workingTopic.trim() || deriveTopic(messages);
   const msgCount = messages.length;
   const mins = Math.floor(uptime / 60);
   const secs = uptime % 60;
@@ -128,6 +137,16 @@ export function StatusPanel({
           <div className={styles.stat}>
             <span className={styles.statValue}>{speakerName}</span>
             <span className={styles.statLabel}>Voice</span>
+          </div>
+        )}
+        <div className={styles.stat}>
+          <span className={styles.statValue}>{workingEmotion}</span>
+          <span className={styles.statLabel}>Mood</span>
+        </div>
+        {memories.length > 0 && (
+          <div className={styles.stat}>
+            <span className={styles.statValue}>{memories.length}</span>
+            <span className={styles.statLabel}>Memories</span>
           </div>
         )}
       </div>
