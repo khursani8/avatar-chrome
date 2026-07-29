@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import { ORT_CDN_BASE } from "./services/tts/piper";
+import { unlockAudio } from "./services/tts/playback";
 
 /**
  * Preload ONNX Runtime Web from public/tts/dist/ if available.
@@ -65,6 +66,12 @@ async function bootstrap() {
       .register(`${import.meta.env.BASE_URL}sw.js`)
       .catch((e) => console.warn("[sw] registration failed:", e));
   }
+
+  // Unlock Web Audio on the first user gesture so TTS playback (which runs in
+  // an async chain after the LLM reply) isn't blocked by Chrome's autoplay policy.
+  const unlock = () => unlockAudio();
+  window.addEventListener("pointerdown", unlock, { once: true });
+  window.addEventListener("keydown", unlock, { once: true });
 }
 
 void bootstrap();

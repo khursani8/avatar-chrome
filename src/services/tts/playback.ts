@@ -12,6 +12,24 @@ let animFrameId: number | null = null;
 
 const RMS_CEILING = 0.12;
 
+/** Shared AudioContext (default rate; AudioBuffers carry their own sampleRate). */
+function getAudioContext(): AudioContext {
+  if (!audioCtx || audioCtx.state === "closed") {
+    audioCtx = new AudioContext();
+  }
+  return audioCtx;
+}
+
+/**
+ * Unlock Web Audio on a user gesture. Chrome blocks AudioContext until it is
+ * created/resumed inside a gesture; call this from a pointerdown/keydown so
+ * later TTS playback (which runs in an async chain, not a gesture) is allowed.
+ */
+export function unlockAudio(): void {
+  const ctx = getAudioContext();
+  if (ctx.state === "suspended") void ctx.resume();
+}
+
 export async function play(
   audio: Float32Array,
   sampleRate: number,
@@ -19,35 +37,25 @@ export async function play(
 ): Promise<void> {
   stop();
 
-  if (
-    !audioCtx ||
-    audioCtx.state === "closed" ||
-    audioCtx.sampleRate !== sampleRate
-  ) {
-    if (audioCtx && audioCtx.state !== "closed") {
-      try {
-        await audioCtx.close();
-      } catch {
-        // ignore
-      }
-    }
-    audioCtx = new AudioContext({ sampleRate });
-  }
-  if (audioCtx.state === "suspended") {
-    await audioCtx.resume();
+  // Use the shared context (created/resumed on the first gesture by unlockAudio).
+  // AudioBuffers carry their own sampleRate, so the default-rate context
+  // resamples correctly — no need to recreate the context per sample rate.
+  const ctx = getAudioContext();
+  if (ctx.state === "suspended") {
+    await ctx.resume();
   }
 
-  const buffer = audioCtx.createBuffer(1, audio.length, sampleRate);
+  const buffer = ctx.createBuffer(1, audio.length, sampleRate);
   buffer.getChannelData(0).set(audio);
 
-  analyserNode = audioCtx.createAnalyser();
+  analyserNode = ctx.createAnalyser();
   analyserNode.fftSize = 256;
 
-  const playbackSource = audioCtx.createBufferSource();
+  const playbackSource = ctx.createBufferSource();
   sourceNode = playbackSource;
   playbackSource.buffer = buffer;
   playbackSource.connect(analyserNode);
-  analyserNode.connect(audioCtx.destination);
+  analyserNode.connect(ctx.destination);
 
   await new Promise<void>((resolve) => {
     playbackSource.onended = () => {
