@@ -1,6 +1,6 @@
 # Avatar Chrome
 
-> 🌐 **Try it live: <https://khursanirevo.github.io/avatar-chrome/>**
+> 🌐 **Try it live: <https://khursani8.github.io/avatar-chrome/>**
 
 Browser-only AI avatar chat app. Uses Chrome Built-in AI (Gemini Nano) for
 conversation, Piper TTS (Revolab/vits Malay voices) for speech, and PNGTuber
@@ -38,7 +38,7 @@ Chrome Built-in AI must be enabled:
 ## Setup
 
 ```bash
-git clone https://github.com/khursanirevo/avatar-chrome.git avatar_chrome
+git clone https://github.com/khursani8/avatar-chrome.git avatar_chrome
 cd avatar_chrome
 npm install
 ```
@@ -167,7 +167,7 @@ scripts/
 
 ## Deployment
 
-The app is deployed to **GitHub Pages**: <https://khursanirevo.github.io/avatar-chrome/>
+The app is deployed to **GitHub Pages**: <https://khursani8.github.io/avatar-chrome/>
 
 To fit static-hosting limits (25 MB/file, no custom response headers):
 
