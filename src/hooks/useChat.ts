@@ -14,6 +14,7 @@ import { SPEAKER_FOR_AVATAR } from "../types";
 import * as llm from "../services/llm";
 import * as tts from "../services/tts";
 import { loadMessages, saveMessages } from "../services/storage";
+import { sanitizeOutput } from "../services/sanitize";
 
 export type LLMStatus =
   | "checking"
@@ -47,12 +48,13 @@ export function useChat(settings: AppSettings) {
   const [isSessionInitializing, setIsSessionInitializing] = useState(true);
   const [ttsReady, setTtsReady] = useState(false);
   const [ttsStatus, setTtsStatus] = useState("");
+  const [userAfk, setUserAfk] = useState(false);
 
   const appliedSystemPromptRef = useRef(settings.llmSystemPrompt);
   const sessionInitCountRef = useRef(0);
   const messagesRef = useRef(messages);
   const lastActivityRef = useRef(0);
-  const silenceTriggeredRef = useRef(false);
+  const silenceCountRef = useRef(0);
   const isSendingRef = useRef(false);
   const isSpeakingRef = useRef(false);
 
@@ -241,7 +243,8 @@ export function useChat(settings: AppSettings) {
 
       // Track user activity for silence detection
       lastActivityRef.current = Date.now();
-      silenceTriggeredRef.current = false;
+      silenceCountRef.current = 0;
+      setUserAfk(false);
 
       setIsSending(true);
 
@@ -293,7 +296,7 @@ export function useChat(settings: AppSettings) {
       saveMessages(updatedWithUser);
 
       try {
-        const reply = await llm.prompt(text.trim());
+        const reply = sanitizeOutput(await llm.prompt(text.trim()));
         const assistantMsg: ChatMessage = {
           id: crypto.randomUUID(),
           role: "assistant",
@@ -366,15 +369,18 @@ export function useChat(settings: AppSettings) {
     if (lastActivityRef.current === 0) lastActivityRef.current = Date.now();
 
     const id = window.setInterval(() => {
-      // Skip if AI is busy or already triggered
       if (isSendingRef.current || isSpeakingRef.current) return;
-      if (silenceTriggeredRef.current) return;
-      // Only trigger after the user has chatted at least once
       if (messagesRef.current.length === 0) return;
 
       if (Date.now() - lastActivityRef.current >= 30_000) {
-        silenceTriggeredRef.current = true;
-        void sendRef.current("<silence:30s>");
+        silenceCountRef.current += 1;
+        lastActivityRef.current = Date.now();
+
+        if (silenceCountRef.current <= 2) {
+          void sendRef.current(`<silence:30s:${silenceCountRef.current}>`);
+        } else {
+          setUserAfk(true);
+        }
       }
     }, 5_000);
 
@@ -438,6 +444,7 @@ export function useChat(settings: AppSettings) {
     isSessionInitializing,
     ttsReady,
     ttsStatus,
+    userAfk,
     initializeAI,
     send,
     reset,

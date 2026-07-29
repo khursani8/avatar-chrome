@@ -96,6 +96,8 @@
 .status-badge.speaking { color: var(--success); border-color: var(--success); }
 .status-badge.speaking .dot { background: var(--success); }
 .status-badge.idle .dot { background: var(--text-secondary); }
+.status-badge.afk { color: var(--warning); border-color: var(--warning); }
+.status-badge.afk .dot { background: var(--warning); }
 
 .topbar-btn {
   width: 36px;

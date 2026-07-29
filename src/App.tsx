@@ -38,6 +38,7 @@ function AppContent({
     isSessionInitializing,
     ttsReady,
     ttsStatus,
+    userAfk,
     initializeAI,
     send,
     reset,
@@ -57,14 +58,16 @@ function AppContent({
   const llmReady = llmStatus === "available";
 
   // Derive AI state for status badge
-  const aiState = isSending ? "thinking" : isSpeaking ? "speaking" : llmReady ? "listening" : "idle";
+  const aiState = isSending ? "thinking" : isSpeaking ? "speaking" : userAfk ? "afk" : llmReady ? "listening" : "idle";
   const statusLabel = isSending
     ? "Thinking"
     : isSpeaking
       ? "Speaking"
-      : llmReady
-        ? "Listening"
-        : "Offline";
+      : userAfk
+        ? "User AFK"
+        : llmReady
+          ? "Listening"
+          : "Offline";
 
   // Load avatar by selected ID
   useEffect(() => {
