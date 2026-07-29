@@ -12,13 +12,41 @@ interface Props {
   avatarName: string;
 }
 
+// Leading filler words (Malay + English) stripped so the topic reflects the
+// subject of a reply rather than a greeting or interjection.
+const TOPIC_FILLER_WORDS = new Set([
+  "hai", "hello", "hi", "hey", "oh", "wah", "eh", "ya", "yeah", "yes",
+  "um", "uh", "hmm", "okay", "ok", "jadi", "well", "so", "wow", "ooo",
+]);
+
+function extractTopic(text: string): string {
+  const tokens = text.replace(/\s+/g, " ").trim().split(" ");
+  let i = 0;
+  while (
+    i < tokens.length &&
+    TOPIC_FILLER_WORDS.has(tokens[i].toLowerCase().replace(/[^a-z]/g, ""))
+  ) {
+    i++;
+  }
+  const words = tokens.slice(i, i + 6).join(" ").trim();
+  if (!words) return "—";
+  return words.length > 32
+    ? words.slice(0, 31).replace(/[\s.,;:!?]+$/, "") + "…"
+    : words;
+}
+
 function deriveTopic(messages: ChatMessage[]): string {
-  const recent = messages.slice(-4);
-  const userMsgs = recent.filter((m) => m.role === "user");
-  if (userMsgs.length === 0) return "—";
-  const last = userMsgs[userMsgs.length - 1].content;
-  const words = last.split(/\s+/).slice(0, 4).join(" ");
-  return words.length > 28 ? words.slice(0, 28) + "…" : words;
+  // Exclude synthetic auto-prompts (e.g. "<silence:30s:1>") — not real turns.
+  const real = messages.filter(
+    (m) => !m.content.trim().startsWith("<silence:")
+  );
+  // Reflect the current subject: prefer the avatar's latest reply, fall back
+  // to the opening user message. Never mirror the latest user input verbatim.
+  for (let i = real.length - 1; i >= 0; i--) {
+    if (real[i].role === "assistant") return extractTopic(real[i].content);
+  }
+  const opener = real.find((m) => m.role === "user");
+  return opener ? extractTopic(opener.content) : "—";
 }
 
 export function StatusPanel({
