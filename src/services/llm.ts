@@ -1,4 +1,5 @@
 import type { AvatarEmotion, AvatarState } from "../types";
+import { BASE_SYSTEM_PROMPT } from "../types";
 
 /**
  * LLM Service — Chrome Built-in AI (Prompt API / LanguageModel)
@@ -139,7 +140,9 @@ export async function createSession(
   const creationGeneration = sessionGeneration;
   const create = async () => {
     const initialPrompts: LanguageModelMessage[] = [
-      { role: "system", content: systemPrompt },
+      // Hardcoded JSON contract (BASE) is hidden from the user; the editable
+      // persona (systemPrompt) is appended so editing Settings can't break it.
+      { role: "system", content: `${BASE_SYSTEM_PROMPT}\n\n${systemPrompt}` },
       ...recentHistory,
     ];
     const options: CreateOptions = { ...MODEL_IO, initialPrompts };
