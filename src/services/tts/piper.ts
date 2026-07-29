@@ -16,6 +16,13 @@ import { initializePhonemizer, phonemizeToCodePoints } from "./phonemizer";
 import { normalizeMalay } from "./normalizer";
 
 const BASE = import.meta.env.BASE_URL;
+// Where speaker models (model.onnx + model.onnx.json) are fetched from.
+// Defaults to local /tts/models/ for dev. For production, set VITE_TTS_MODEL_BASE
+// to a host that allows cross-origin reads (e.g. a public HuggingFace repo) so
+// the large (>25MB) models don't have to be bundled into the static deploy.
+const MODEL_BASE = import.meta.env.VITE_TTS_MODEL_BASE
+  ? String(import.meta.env.VITE_TTS_MODEL_BASE)
+  : `${BASE}tts/models/`;
 const PHONEMIZER_VOICE = "ms"; // Malay espeak-ng voice
 
 // ort is loaded from public/tts/dist/ort.min.js via <script> tag in main.tsx
@@ -118,8 +125,8 @@ async function ensureSpeakerLoaded(speakerId: string): Promise<LoadedSpeaker> {
   const speaker = speakers.find((s) => s.id === speakerId);
   if (!speaker) throw new Error(`Unknown speaker: ${speakerId}`);
 
-  const modelUrl = `${BASE}tts/models/${speaker.dir}/model.onnx`;
-  const configUrl = `${BASE}tts/models/${speaker.dir}/model.onnx.json`;
+  const modelUrl = `${MODEL_BASE}${speaker.dir}/model.onnx`;
+  const configUrl = `${MODEL_BASE}${speaker.dir}/model.onnx.json`;
   console.log(`[TTS] Loading speaker ${speakerId} from ${modelUrl}`);
 
   const configResp = await fetch(configUrl);
