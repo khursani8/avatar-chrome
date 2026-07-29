@@ -15,6 +15,7 @@ interface Props {
   workingEmotion: AvatarEmotion;
   memories: MemoryFact[];
   speakerLoading: boolean;
+  speakerLoadProgress: number | null;
   online: boolean;
 }
 
@@ -67,6 +68,7 @@ export function StatusPanel({
   workingEmotion,
   memories,
   speakerLoading,
+  speakerLoadProgress,
   online,
 }: Props) {
   const voicePct = Math.round(mouthLevel * 100);
@@ -111,7 +113,21 @@ export function StatusPanel({
         <div className={styles.stateWrap}>
           {speakerLoading && (
             <span className={`${styles.stateTag} ${styles.thinking}`}>
-              <span className={styles.spinner} /> Loading voice
+              {speakerLoadProgress == null ? (
+                <>
+                  <span className={styles.spinner} /> Loading voice
+                </>
+              ) : (
+                <>
+                  <span className={styles.loadBar}>
+                    <span
+                      className={styles.loadBarFill}
+                      style={{ width: `${speakerLoadProgress}%` }}
+                    />
+                  </span>
+                  {speakerLoadProgress}%
+                </>
+              )}
             </span>
           )}
           {!speakerLoading && isSending && (

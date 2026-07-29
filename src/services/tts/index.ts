@@ -24,7 +24,7 @@ export function isSpeakerLoaded(speakerId: string): boolean {
 
 export async function preloadSpeaker(
   speakerId: string,
-  onStatus?: (msg: string | null) => void
+  onStatus?: (msg: string | null, progress?: number) => void
 ): Promise<void> {
   return tts.preloadSpeaker(speakerId, onStatus);
 }
@@ -47,7 +47,7 @@ export async function speak(
   text: string,
   onMouthChange: (level: number) => void,
   options?: { speaker?: string; lengthScale?: number },
-  onStatus?: (msg: string | null) => void
+  onStatus?: (msg: string | null, progress?: number) => void
 ): Promise<void> {
   stop();
   onMouthChange(0);

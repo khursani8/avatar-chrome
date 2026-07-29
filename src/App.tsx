@@ -45,6 +45,7 @@ function AppContent({
     workingEmotion,
     memories,
     speakerLoading,
+    speakerLoadProgress,
     initializeAI,
     send,
     reset,
@@ -334,6 +335,7 @@ function AppContent({
                 workingEmotion={workingEmotion}
                 memories={memories}
                 speakerLoading={speakerLoading}
+                speakerLoadProgress={speakerLoadProgress}
                 online={online}
               />
             </aside>

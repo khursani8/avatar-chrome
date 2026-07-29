@@ -136,16 +136,64 @@ export function isSpeakerLoaded(speakerId: string): boolean {
  */
 export async function preloadSpeaker(
   speakerId: string,
-  onStatus?: (msg: string | null) => void
+  onStatus?: (msg: string | null, progress?: number) => void
 ): Promise<void> {
   if (!ready) return;
   await ensureSpeakerLoaded(speakerId, onStatus);
 }
 
+/** Fetch a model with download progress, returning raw bytes for ORT. */
+async function fetchModelWithProgress(
+  url: string,
+  onProgress?: (percent: number) => void
+): Promise<Uint8Array> {
+  const resp = await fetch(url);
+  if (!resp.ok || !resp.body) {
+    throw new Error(`Failed to fetch model: ${resp.status}`);
+  }
+  const total = Number(resp.headers.get("content-length")) || 0;
+  const reader = resp.body.getReader();
+
+  if (total > 0) {
+    // Known size: pre-allocate and report percentage.
+    const buffer = new Uint8Array(total);
+    let offset = 0;
+    let chunk = await reader.read();
+    while (!chunk.done) {
+      if (chunk.value) {
+        buffer.set(chunk.value, offset);
+        offset += chunk.value.length;
+        onProgress?.(Math.min(100, Math.round((offset / total) * 100)));
+      }
+      chunk = await reader.read();
+    }
+    return buffer;
+  }
+
+  // Unknown size: accumulate chunks (no percentage).
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  let chunk = await reader.read();
+  while (!chunk.done) {
+    if (chunk.value) {
+      chunks.push(chunk.value);
+      received += chunk.value.length;
+    }
+    chunk = await reader.read();
+  }
+  const merged = new Uint8Array(received);
+  let pos = 0;
+  for (const c of chunks) {
+    merged.set(c, pos);
+    pos += c.length;
+  }
+  return merged;
+}
+
 /** Load a speaker's ONNX model + config if not already cached (dedup'd). */
 async function ensureSpeakerLoaded(
   speakerId: string,
-  onStatus?: (msg: string | null) => void
+  onStatus?: (msg: string | null, progress?: number) => void
 ): Promise<LoadedSpeaker> {
   const cached = loadedSessions.get(speakerId);
   if (cached) return cached;
@@ -163,7 +211,7 @@ async function ensureSpeakerLoaded(
 
 async function loadSpeakerSession(
   speakerId: string,
-  onStatus?: (msg: string | null) => void
+  onStatus?: (msg: string | null, progress?: number) => void
 ): Promise<LoadedSpeaker> {
   const speaker = speakers.find((s) => s.id === speakerId);
   if (!speaker) throw new Error(`Unknown speaker: ${speakerId}`);
@@ -174,7 +222,7 @@ async function loadSpeakerSession(
   const modelUrl = `${MODEL_BASE}${speaker.dir}/model.onnx`;
   const configUrl = `${BASE}tts/models/${speaker.dir}/model.onnx.json`;
   console.log(`[TTS] Loading speaker ${speakerId} from ${modelUrl}`);
-  onStatus?.(`Loading ${speaker.name || speaker.id} voice…`);
+  onStatus?.(`Loading ${speaker.name || speaker.id} voice…`, 0);
 
   const configResp = await fetch(configUrl);
   if (!configResp.ok) {
@@ -183,8 +231,13 @@ async function loadSpeakerSession(
   const config = await configResp.json();
   console.log(`[TTS] Config:`, { sample_rate: config.audio?.sample_rate, voice: config.espeak?.voice, num_symbols: config.num_symbols });
 
-  console.log(`[TTS] Creating ONNX session (61MB model, this takes a moment)...`);
-  const session = await ort.InferenceSession.create(modelUrl, {
+  // Fetch the model with download progress, then hand the bytes to ORT.
+  console.log(`[TTS] Downloading model with progress...`);
+  const modelData = await fetchModelWithProgress(modelUrl, (pct) => {
+    onStatus?.(`Loading ${speaker.name || speaker.id} voice…`, pct);
+  });
+  onStatus?.(`Preparing ${speaker.name || speaker.id}…`);
+  const session = await ort.InferenceSession.create(modelData, {
     executionProviders: ["wasm"],
     graphOptimizationLevel: "all",
   });

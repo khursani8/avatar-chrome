@@ -55,6 +55,7 @@ export function useChat(settings: AppSettings) {
   const [workingEmotion, setWorkingEmotion] = useState<AvatarEmotion>("neutral");
   const [memories, setMemories] = useState<MemoryFact[]>(() => memory.loadMemories());
   const [speakerLoading, setSpeakerLoading] = useState(false);
+  const [speakerLoadProgress, setSpeakerLoadProgress] = useState<number | null>(null);
 
   const appliedSystemPromptRef = useRef(settings.llmSystemPrompt);
   const sessionInitCountRef = useRef(0);
@@ -421,16 +422,21 @@ export function useChat(settings: AppSettings) {
       // synchronously in the effect body (react-hooks/set-state-in-effect).
       if (!tts.isSpeakerLoaded(speakerId)) setSpeakerLoading(true);
       try {
-        await tts.preloadSpeaker(speakerId, (msg) => {
-          if (!cancelled) setStatusText(msg ?? "");
+        await tts.preloadSpeaker(speakerId, (msg, progress) => {
+          if (!cancelled) {
+            setStatusText(msg ?? "");
+            setSpeakerLoadProgress(typeof progress === "number" ? progress : null);
+          }
         });
         if (!cancelled) {
           setSpeakerLoading(false);
+          setSpeakerLoadProgress(null);
           setStatusText("");
         }
       } catch (e) {
         if (!cancelled) {
           setSpeakerLoading(false);
+          setSpeakerLoadProgress(null);
           setStatusText("");
           console.warn("[TTS] speaker preload failed:", e);
         }
@@ -533,6 +539,7 @@ export function useChat(settings: AppSettings) {
     ttsStatus,
     userAfk,
     speakerLoading,
+    speakerLoadProgress,
     workingTopic,
     workingEmotion,
     memories,
