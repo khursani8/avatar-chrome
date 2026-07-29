@@ -1,8 +1,14 @@
 # Avatar Chrome
 
+> 🌐 **Try it live: <https://khursanirevo.github.io/avatar-chrome/>**
+
 Browser-only AI avatar chat app. Uses Chrome Built-in AI (Gemini Nano) for
 conversation, Piper TTS (Revolab/vits Malay voices) for speech, and PNGTuber
 avatars with lip-sync. **No backend server** — everything runs in the browser.
+
+**Who can use the live site:** desktop Chrome 138+ with the Gemini Nano flags
+enabled and ≥16 GB RAM (see [Requirements](#requirements)). Mobile, Firefox,
+Safari, and unflagged browsers see an in-app setup guide instead.
 
 ## Features
 
@@ -32,7 +38,7 @@ Chrome Built-in AI must be enabled:
 ## Setup
 
 ```bash
-git clone <your-repo-url> avatar_chrome
+git clone https://github.com/khursanirevo/avatar-chrome.git avatar_chrome
 cd avatar_chrome
 npm install
 ```
@@ -158,6 +164,29 @@ src/
 scripts/
 └── prepare-tts.mjs             ← one-time asset setup
 ```
+
+## Deployment
+
+The app is deployed to **GitHub Pages**: <https://khursanirevo.github.io/avatar-chrome/>
+
+To fit static-hosting limits (25 MB/file, no custom response headers):
+
+- **ONNX Runtime** loads from the jsDelivr CDN (`onnxruntime-web@1.27.0`) — see `ORT_CDN_BASE` in `src/services/tts/piper.ts`.
+- **Piper models** (61 MB each) stream at runtime from the public `Revolab/vits` HuggingFace repo (`VITE_TTS_MODEL_BASE`).
+- **`model.onnx.json`** configs are committed and served locally — the HF export ships an empty `phoneme_id_map`, which would silence all audio.
+- No COOP/COEP headers needed: ONNX runs `numThreads = 1` (no SharedArrayBuffer).
+
+Deploy with:
+
+```bash
+VITE_BASE_PATH=/avatar-chrome/ \
+VITE_TTS_MODEL_BASE=https://huggingface.co/Revolab/vits/resolve/main/speakers/ \
+npm run build
+rm -f dist/tts/models/{paan,sarah}/model.onnx   # models come from HF
+npx gh-pages -d dist
+```
+
+`scripts/deploy-pages.sh` is the Cloudflare Pages fallback (free unlimited bandwidth).
 
 ## License
 
