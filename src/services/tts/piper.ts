@@ -130,8 +130,11 @@ async function ensureSpeakerLoaded(speakerId: string): Promise<LoadedSpeaker> {
   const speaker = speakers.find((s) => s.id === speakerId);
   if (!speaker) throw new Error(`Unknown speaker: ${speakerId}`);
 
+  // The 61MB model.onnx binary is fetched from MODEL_BASE (HuggingFace in prod).
+  // The small model.onnx.json config is served LOCALLY — the HF export ships an
+  // empty phoneme_id_map, which would leave every phoneme unmapped (silent audio).
   const modelUrl = `${MODEL_BASE}${speaker.dir}/model.onnx`;
-  const configUrl = `${MODEL_BASE}${speaker.dir}/model.onnx.json`;
+  const configUrl = `${BASE}tts/models/${speaker.dir}/model.onnx.json`;
   console.log(`[TTS] Loading speaker ${speakerId} from ${modelUrl}`);
 
   const configResp = await fetch(configUrl);

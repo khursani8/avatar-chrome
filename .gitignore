@@ -26,10 +26,12 @@ dist-ssr
 public/tts/espeak-ng-data/
 public/tts/dist/
 public/tts/piper-phonemize-wasm.*
-# Piper models are fetched from HuggingFace at runtime (see VITE_TTS_MODEL_BASE);
-# only the small speakers.json manifest is committed.
-public/tts/models/*
-!public/tts/models/speakers.json
+# Piper model.onnx binaries (61MB) are fetched from HuggingFace at runtime
+# (see VITE_TTS_MODEL_BASE). The small model.onnx.json configs (carrying
+# phoneme_id_map) and speakers.json are committed — the HF export ships an
+# empty phoneme_id_map, which would silence all audio.
+public/tts/models/*/*
+!public/tts/models/*/model.onnx.json
 
 # Old piper directory (superseded by public/tts/)
 public/piper/
