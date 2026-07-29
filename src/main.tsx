@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
+import { ORT_CDN_BASE } from "./services/tts/piper";
 
 /**
  * Preload ONNX Runtime Web from public/tts/dist/ if available.
@@ -44,8 +45,9 @@ function loadScript(src: string): Promise<void> {
 
 async function bootstrap() {
   try {
-    const base = import.meta.env.BASE_URL;
-    await loadScript(`${base}tts/dist/ort.min.js`);
+    // ONNX Runtime Web loaded from a pinned CDN to avoid bundling the
+    // ~129MB runtime / >25MB wasm files into the static deploy.
+    await loadScript(`${ORT_CDN_BASE}ort.min.js`);
   } catch (error) {
     console.warn("ONNX Runtime not preloaded:", error);
   }

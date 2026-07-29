@@ -25,6 +25,11 @@ const MODEL_BASE = import.meta.env.VITE_TTS_MODEL_BASE
   : `${BASE}tts/models/`;
 const PHONEMIZER_VOICE = "ms"; // Malay espeak-ng voice
 
+// ONNX Runtime Web is loaded from a pinned CDN (see main.tsx) to keep the
+// static deploy small and avoid bundling the >25MB wasm files.
+export const ORT_CDN_BASE =
+  "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/";
+
 // ort is loaded from public/tts/dist/ort.min.js via <script> tag in main.tsx
 declare const ort: any;
 
@@ -73,7 +78,7 @@ export async function initialize(
           "ONNX Runtime not loaded. Ensure public/tts/dist/ort.min.js exists."
         );
       }
-      ort.env.wasm.wasmPaths = `${BASE}tts/dist/`;
+      ort.env.wasm.wasmPaths = ORT_CDN_BASE;
       ort.env.wasm.numThreads = 1;
       ort.env.wasm.simd = true;
       console.log("[TTS] Step 2 done: ORT available");
