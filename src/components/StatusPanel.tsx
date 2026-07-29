@@ -15,6 +15,7 @@ interface Props {
   workingEmotion: AvatarEmotion;
   memories: MemoryFact[];
   speakerLoading: boolean;
+  online: boolean;
 }
 
 // Leading filler words (Malay + English) stripped so the topic reflects the
@@ -66,6 +67,7 @@ export function StatusPanel({
   workingEmotion,
   memories,
   speakerLoading,
+  online,
 }: Props) {
   const voicePct = Math.round(mouthLevel * 100);
   const [uptime, setUptime] = useState(0);
@@ -157,6 +159,19 @@ export function StatusPanel({
           </div>
         )}
       </div>
+
+      {/* Engine — on-device / offline indicator (bottom-left) */}
+      <div className={styles.engine}>
+        <span
+          className={`${styles.engineDot} ${online ? styles.online : styles.offline}`}
+        />
+        <span className={styles.engineText}>
+          {online ? "Gemini Nano · on-device" : "Offline · running on-device"}
+        </span>
+      </div>
+      <p className={styles.privacy}>
+        Runs in your browser · conversations stay on your device
+      </p>
     </div>
   );
 }

@@ -57,6 +57,14 @@ async function bootstrap() {
       <App />
     </StrictMode>
   );
+
+  // Register the offline service worker (production only — dev stays uncached
+  // so HMR isn't masked by stale cached assets).
+  if (import.meta.env.PROD && "serviceWorker" in navigator) {
+    navigator.serviceWorker
+      .register(`${import.meta.env.BASE_URL}sw.js`)
+      .catch((e) => console.warn("[sw] registration failed:", e));
+  }
 }
 
 void bootstrap();

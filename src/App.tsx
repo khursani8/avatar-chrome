@@ -9,6 +9,7 @@ import { Toast } from "./components/Toast";
 import { BootOverlay } from "./components/BootOverlay";
 import { useChat } from "./hooks/useChat";
 import { useSettings } from "./hooks/useSettings";
+import { useOnlineStatus } from "./hooks/useOnlineStatus";
 import { getDefaultAvatar, getAvatarById } from "./services/avatar";
 import {
   deleteBackgroundImage,
@@ -50,6 +51,8 @@ function AppContent({
     recheckAI,
     clearError,
   } = useChat(settings);
+
+  const online = useOnlineStatus();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
@@ -331,6 +334,7 @@ function AppContent({
                 workingEmotion={workingEmotion}
                 memories={memories}
                 speakerLoading={speakerLoading}
+                online={online}
               />
             </aside>
 
