@@ -188,6 +188,14 @@ npx gh-pages -d dist
 
 `scripts/deploy-pages.sh` is the Cloudflare Pages fallback (free unlimited bandwidth).
 
+## Acknowledgements
+
+Based on **[chrome-on-aituber](https://github.com/shinshin86/chrome-on-aituber)** by [@shinshin86](https://github.com/shinshin86) — a browser-only AITuber chat app built on Chrome Built-in AI, Piper WASM TTS, and 4-sprite PNGTuber avatars. This project is a lean rework of that idea, retuned for **Bahasa Melayu** with Revolab/vits voices, structured JSON state + long-term memory, and an offline-first deploy.
+
+- Malay voices: [Revolab/vits](https://huggingface.co/Revolab/vits)
+- Inference: [ONNX Runtime Web](https://onnxruntime.ai/) (Microsoft), served via [jsDelivr](https://www.jsdelivr.com/)
+- Phonemizer: [piper-phonemize](https://github.com/rhasspy/piper-phonemize) / espeak-ng
+
 ## License
 
 MIT
